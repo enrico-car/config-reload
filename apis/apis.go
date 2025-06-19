@@ -3,7 +3,7 @@ package apis
 import (
 	"k8s.io/apimachinery/pkg/runtime"
 
-	samplecontrollerv1 "github.com/krateoplatformops/sample-controller/apis/chaospod/v1"
+	samplecontrollerv1 "github.com/krateoplatformops/config-reload/apis/configreload/v1"
 )
 
 func init() {
