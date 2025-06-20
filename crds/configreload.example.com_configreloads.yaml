@@ -15,13 +15,11 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - format: date
-      jsonPath: .spec.lastRolloutTime
-      name: last rollout
+    - jsonPath: .status.lastRolloutTime
+      name: last deployment rollout
       type: string
-    - format: date
-      jsonPath: .status.LastConlastConfigMapVersionfigMapTime
-      name: last configMap update
+    - jsonPath: .status.lastConfigMapVersion
+      name: last configMap version
       type: string
     name: v1
     schema:
@@ -60,7 +58,6 @@ spec:
           status:
             properties:
               lastConfigMapVersion:
-                format: date-time
                 type: string
               lastRolloutTime:
                 format: date-time

@@ -17,7 +17,6 @@ limitations under the License.
 package pkg
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -52,15 +51,15 @@ type ConfigReloadStatus struct {
 	// +optional
 	LastRolloutTime metav1.Time `json:"lastRolloutTime,omitempty"`
 
-	// Indicate the last time the ConfigMap was updated.
+	// Indicate the last ConfigMap version that was used to roll out the Deployment.
 	// +optional
-	LastConfigMapTime metav1.Time `json:"lastConfigMapVersion,omitempty"`
+	LastConfigMapVersion string `json:"lastConfigMapVersion,omitempty"`	
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="last rollout",type="string",JSONPath=".spec.lastRolloutTime",format="date"
-// +kubebuilder:printcolumn:name="last configMap update",type="string",JSONPath=".status.LastConlastConfigMapVersionfigMapTime",format="date"
+// +kubebuilder:printcolumn:name="last deployment rollout",type="string",JSONPath=".status.lastRolloutTime"
+// +kubebuilder:printcolumn:name="last configMap version",type="string",JSONPath=".status.lastConfigMapVersion"
 type ConfigReload struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

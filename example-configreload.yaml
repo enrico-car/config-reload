@@ -1,0 +1,12 @@
+apiVersion: configreload.example.com/v1
+kind: ConfigReload
+metadata:
+  name: example-configreload
+  namespace: default
+spec:
+  configmapRef:
+    name: my-configmap
+    namespace: default
+  deploymentRef:
+    name: my-deployment
+    namespace: default
