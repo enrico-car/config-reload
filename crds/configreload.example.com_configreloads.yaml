@@ -14,7 +14,16 @@ spec:
     singular: configreload
   scope: Namespaced
   versions:
-  - name: v1
+  - additionalPrinterColumns:
+    - format: date
+      jsonPath: .spec.lastRolloutTime
+      name: last rollout
+      type: string
+    - format: date
+      jsonPath: .status.LastConlastConfigMapVersionfigMapTime
+      name: last configMap update
+      type: string
+    name: v1
     schema:
       openAPIV3Schema:
         properties:

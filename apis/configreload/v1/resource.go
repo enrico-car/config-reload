@@ -59,7 +59,8 @@ type ConfigReloadStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-
+// +kubebuilder:printcolumn:name="last rollout",type="string",JSONPath=".spec.lastRolloutTime",format="date"
+// +kubebuilder:printcolumn:name="last configMap update",type="string",JSONPath=".status.LastConlastConfigMapVersionfigMapTime",format="date"
 type ConfigReload struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -74,7 +75,7 @@ type ConfigReload struct {
 type ConfigReloadList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []ConfigReloadPod `json:"items"`
+	Items           []ConfigReload `json:"items"`
 }
 
 func init() {
