@@ -5,7 +5,7 @@ metadata:
   namespace: default
 spec:
   configmapRef:
-    name: my-configmap
+    name: my-configmap3
     namespace: default
   deploymentRef:
     name: my-deployment

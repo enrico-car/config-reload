@@ -33,7 +33,7 @@ type DeploymentRef struct {
 	// +kubebuilder:validation:Required
 	Name string `json:"name"`
 
-	// +optional
+	// +kubebuilder:validation:Required
 	Namespace string `json:"namespace,omitempty"`
 }
 
@@ -41,7 +41,7 @@ type ConfigMapRef struct {
 	// +kubebuilder:validation:Required
 	Name string `json:"name"`
 
-	// +optional
+	// +kubebuilder:validation:Required
 	Namespace string `json:"namespace,omitempty"`
 }
 
@@ -53,13 +53,14 @@ type ConfigReloadStatus struct {
 
 	// Indicate the last ConfigMap version that was used to roll out the Deployment.
 	// +optional
-	LastConfigMapVersion string `json:"lastConfigMapVersion,omitempty"`	
+	LastConfigMapVersion string `json:"lastConfigMapVersion,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="last deployment rollout",type="string",JSONPath=".status.lastRolloutTime"
 // +kubebuilder:printcolumn:name="last configMap version",type="string",JSONPath=".status.lastConfigMapVersion"
+
 type ConfigReload struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

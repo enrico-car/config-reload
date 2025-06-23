@@ -24,10 +24,10 @@ import (
 	configv1 "github.com/krateoplatformops/config-reload/apis/configreload/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -41,13 +41,15 @@ import (
 
 const (
 	configMapName  = ".spec.configmapRef.name"
-	deploymentName = ".spec.deploymentRef.name"
+	reconcileInterval = 3 * time.Minute
+	reconcileIntervalError = 15 * time.Second
 )
 
 var (
 	setupLog = ctrl.Log.WithName("setup")
 )
 
+// rule defining the permissions for the watcher and rollout
 // +kubebuilder:rbac:groups=configreload.example.com,resources=configreloads,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=configreload.example.com,resources=configreloads/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=configreload.example.com,resources=configreloads/finalizers,verbs=update
@@ -76,15 +78,41 @@ func getLastRolloutTime(deployment *appsv1.Deployment) time.Time {
 	return time.Time{}
 }
 
+// findObjectsForConfigMap returns a list of reconcile requests for ConfigReload objects that reference the given ConfigMap.
+func (r *reconciler) findObjectsForConfigMap(ctx context.Context, configMap client.Object) []reconcile.Request {
+	configReloadList := &configv1.ConfigReloadList{}
+
+	listOps := &client.ListOptions{
+		FieldSelector: fields.OneTermEqualSelector(configMapName, configMap.GetName()),
+		Namespace:     configMap.GetNamespace(),
+	}
+
+	if err := r.List(ctx, configReloadList, listOps); err != nil {
+		log.Log.Error(err, "unable to list ConfigReloads")
+		return []reconcile.Request{}
+	}
+
+	requests := make([]reconcile.Request, len(configReloadList.Items))
+	for i, item := range configReloadList.Items {
+		requests[i] = reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      item.GetName(),
+				Namespace: item.GetNamespace(),
+			},
+		}
+	}
+	return requests
+}
+
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx).WithValues("configreload", req.NamespacedName)
-	log.Info("reconciling config reload")
+	log.V(1).Info("reconciling config reload")
 
 	var configreload configv1.ConfigReload
 	if err := r.Get(ctx, req.NamespacedName, &configreload); err != nil {
 		if client.IgnoreNotFound(err) == nil {
-			log.Info("ConfigReload resource not found. Ignoring since object must be deleted.")
-			return ctrl.Result{}, nil
+			log.V(1).Info("ConfigReload resource not found. Ignoring since object must be deleted.")
+			return ctrl.Result{RequeueAfter: reconcileInterval}, nil
 		}
 		log.Error(err, "unable to get ConfigReload")
 		return ctrl.Result{}, err
@@ -122,67 +150,44 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	if updatedStatus {
 		if err := r.Status().Update(ctx, &configreload); err != nil {
 			log.Error(err, "unable to update ConfigReload status during initialization")
-			return ctrl.Result{}, err
+			return ctrl.Result{RequeueAfter: reconcileIntervalError}, err
 		}
-		return ctrl.Result{}, nil
+		return ctrl.Result{RequeueAfter: reconcileInterval}, nil
 	}
 
 	if configreload.Status.LastConfigMapVersion == configMap.ResourceVersion {
-		log.Info("ConfigMap version has not changed")
-		return ctrl.Result{}, nil
+		log.V(1).Info("ConfigMap version has not changed")
+		return ctrl.Result{RequeueAfter: reconcileInterval}, nil
 	}
 
 	// If the ConfigMap version has changed, we need to roll out the Deployment
-	log.Info("ConfigMap version has changed, rolling out Deployment", "configMapVersion", configMap.ResourceVersion)
+	log.V(1).Info("ConfigMap version has changed, rolling out Deployment", "configMapVersion", configMap.ResourceVersion)
 	deploymentCopy := deployment.DeepCopy()
 
 	if deploymentCopy.Spec.Template.Annotations == nil {
 		deploymentCopy.Spec.Template.Annotations = make(map[string]string)
 	}
 	now := time.Now()
+	// Add or update the annotation to trigger a rollout
 	deploymentCopy.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"] = now.Format(time.RFC3339)
 
 	if err := r.Update(ctx, deploymentCopy); err != nil {
 		log.Error(err, "unable to update Deployment for rollout")
-		return ctrl.Result{}, err
+		return ctrl.Result{RequeueAfter: reconcileIntervalError}, err
 	}
 
 	// Update the ConfigReload status with the last rollout time and ConfigMap version
-	configreload.Status.LastRolloutTime = metav1.NewTime(getLastRolloutTime(deploymentCopy))
+	configreload.Status.LastRolloutTime = metav1.NewTime(now)
 	configreload.Status.LastConfigMapVersion = configMap.ResourceVersion
 	log.Info("updating ConfigReload status", "lastRolloutTime", configreload.Status.LastRolloutTime, "lastConfigMapVersion", configreload.Status.LastConfigMapVersion)
 
 	if err := r.Status().Update(ctx, &configreload); err != nil {
 		log.Error(err, "unable to update ConfigReload status")
-		return ctrl.Result{}, err
-	}
-	return ctrl.Result{}, nil
-}
-
-func (r *reconciler) findObjectsForConfigMap(ctx context.Context, configMap client.Object) []reconcile.Request {
-	configReloadList := &configv1.ConfigReloadList{}
-
-	listOps := &client.ListOptions{
-		FieldSelector: fields.OneTermEqualSelector(configMapName, configMap.GetName()),
-		Namespace:     configMap.GetNamespace(),
+		return ctrl.Result{RequeueAfter: reconcileIntervalError}, err
 	}
 
-	if err := r.List(ctx, configReloadList, listOps); err != nil {
-		log.Log.Error(err, "unable to list ConfigReloads")
-		return []reconcile.Request{}
-	}
-
-	requests := make([]reconcile.Request, len(configReloadList.Items))
-	for i, item := range configReloadList.Items {
-		requests[i] = reconcile.Request{
-			NamespacedName: types.NamespacedName{
-				Name:      item.GetName(),
-				Namespace: item.GetNamespace(),
-			},
-		}
-	}
-
-	return requests
+	// reconcile again after a delay
+	return ctrl.Result{RequeueAfter: reconcileInterval}, nil
 }
 
 func main() {
@@ -201,6 +206,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Create an index for ConfigReload resources based on the ConfigMap name
 	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &configv1.ConfigReload{}, configMapName, func(rawObj client.Object) []string {
 		// Extract the ConfigMap name from the ConfigReload Spec, if one is provided
 		configReload := rawObj.(*configv1.ConfigReload)
@@ -219,7 +225,10 @@ func main() {
 	}
 
 	err = ctrl.NewControllerManagedBy(mgr).
-		For(&configv1.ConfigReload{}).
+		For(&configv1.ConfigReload{},
+			// Use a predicate to only trigger reconciliation when the ConfigReload's resource version changes
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
+		).
 		Watches(
 			&corev1.ConfigMap{},
 			handler.EnqueueRequestsFromMapFunc(r.findObjectsForConfigMap),
