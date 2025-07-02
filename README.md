@@ -99,7 +99,7 @@ kubectl apply -f example-deployment.yaml
 ### Apply the ConfigReload resource:
 
 ```bash
-kubectl apply -f example-configmap.yaml
+kubectl apply -f example-configreload.yaml
 ```
 
 ### Check the status of the ConfigReload
